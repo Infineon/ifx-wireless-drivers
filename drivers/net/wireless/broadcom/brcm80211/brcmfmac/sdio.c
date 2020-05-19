@@ -25,6 +25,7 @@
 #include <linux/debugfs.h>
 #include <linux/vmalloc.h>
 #include <linux/unaligned.h>
+#include <linux/net_tstamp.h>
 #include <defs.h>
 #include <brcmu_wifi.h>
 #include <brcmu_utils.h>
@@ -3018,6 +3019,8 @@ static int brcmf_sdio_bus_txdata(struct device *dev, struct sk_buff *pkt)
 			 pending event, or pending clock */
 	brcmf_dbg(TRACE, "deferring pktq len %d\n", pktq_len(&bus->txq));
 	bus->sdcnt.fcqueued++;
+
+	skb_tx_timestamp(pkt);
 
 	/* Priority based enq */
 	spin_lock_bh(&bus->txq_lock);
