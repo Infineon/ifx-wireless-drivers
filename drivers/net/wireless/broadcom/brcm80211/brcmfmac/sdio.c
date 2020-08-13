@@ -669,13 +669,17 @@ static void pkt_align(struct sk_buff *p, int len, int align)
 	__skb_trim(p, len);
 }
 
-/* To check if there's window offered
- * Reserve 3 credits for txctl
- */
+/* To check if there's window offered */
 static bool data_ok(struct brcmf_sdio *bus)
 {
-	return (u8)(bus->tx_max - bus->tx_seq) > TXCTL_CREDITS &&
-	       ((u8)(bus->tx_max - bus->tx_seq) & 0x80) == 0;
+	u8 tx_rsv = 0;
+
+	/* Reserve TXCTL_CREDITS credits for txctl when it is ready to send */
+	if (bus->ctrl_frame_stat)
+		tx_rsv = TXCTL_CREDITS;
+
+	return (bus->tx_max - bus->tx_seq - tx_rsv) != 0 &&
+	       ((bus->tx_max - bus->tx_seq - tx_rsv) & 0x80) == 0;
 }
 
 /* To check if there's window offered */
