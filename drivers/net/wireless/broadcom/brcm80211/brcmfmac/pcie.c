@@ -2099,7 +2099,7 @@ static void brcmf_pcie_setup(struct device *dev, int ret,
 fail:
 	brcmf_err(bus, "Dongle setup failed\n");
 	brcmf_pcie_bus_console_read(devinfo, true);
-	brcmf_fw_crashed(dev);
+	brcmf_dev_coredump(dev);
 	device_release_driver(dev);
 }
 
