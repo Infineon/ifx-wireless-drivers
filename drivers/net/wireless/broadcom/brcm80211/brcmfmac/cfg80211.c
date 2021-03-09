@@ -2168,6 +2168,7 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 			break;
 		case WLAN_AKM_SUITE_DPP:
 			val = WFA_AUTH_DPP;
+			profile->use_fwsup = BRCMF_PROFILE_FWSUP_NONE;
 			break;
 		default:
 			bphy_err(drvr, "invalid akm suite (%d)\n",
@@ -2501,8 +2502,6 @@ brcmf_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 				brcmf_dbg(INFO, "using PSK offload\n");
 				profile->use_fwsup = BRCMF_PROFILE_FWSUP_PSK;
 			}
-		} else {
-			profile->use_fwsup = BRCMF_PROFILE_FWSUP_NONE;
 		}
 		if (profile->use_fwsup != BRCMF_PROFILE_FWSUP_NONE) {
 			/* enable firmware supplicant for this interface */
