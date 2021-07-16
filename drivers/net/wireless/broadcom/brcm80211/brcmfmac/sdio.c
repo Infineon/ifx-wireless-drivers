@@ -65,6 +65,10 @@
 #define CY_435X_F2_WATERMARK	0x40
 #define CY_435X_F1_MESBUSYCTRL	(CY_435X_F2_WATERMARK | \
 				 SBSDIO_MESBUSYCTRL_ENAB)
+#define CY_89459_F2_WATERMARK	0x40
+#define CY_89459_MES_WATERMARK	0x40
+#define CY_89459_MESBUSYCTRL	(CY_89459_MES_WATERMARK | \
+				 SBSDIO_MESBUSYCTRL_ENAB)
 
 #ifdef DEBUG
 
@@ -639,6 +643,7 @@ CY_FW_DEF(4356, "cyfmac4356-sdio");
 CY_FW_DEF(4359, "cyfmac4359-sdio");
 CY_FW_DEF(4373, "cyfmac4373-sdio");
 CY_FW_DEF(43012, "cyfmac43012-sdio");
+CY_FW_DEF(89459, "cyfmac54591-sdio");
 
 static const struct brcmf_firmware_mapping brcmf_sdio_fwnames[] = {
 	BRCMF_FW_ENTRY(BRCM_CC_43143_CHIP_ID, 0xFFFFFFFF, 43143),
@@ -663,7 +668,8 @@ static const struct brcmf_firmware_mapping brcmf_sdio_fwnames[] = {
 	BRCMF_FW_ENTRY(BRCM_CC_4359_CHIP_ID, 0xFFFFFFFF, 4359),
 	BRCMF_FW_ENTRY(CY_CC_43439_CHIP_ID, 0xFFFFFFFF, 43439),
 	BRCMF_FW_ENTRY(CY_CC_4373_CHIP_ID, 0xFFFFFFFF, 4373),
-	BRCMF_FW_ENTRY(CY_CC_43012_CHIP_ID, 0xFFFFFFFF, 43012)
+	BRCMF_FW_ENTRY(CY_CC_43012_CHIP_ID, 0xFFFFFFFF, 43012),
+	BRCMF_FW_ENTRY(CY_CC_89459_CHIP_ID, 0xFFFFFFFF, 89459)
 };
 
 #define TXCTL_CREDITS	2
@@ -4582,6 +4588,22 @@ static void brcmf_sdio_firmware_callback(struct device *dev, int err,
 					   &err);
 			brcmf_sdiod_writeb(sdiod, SBSDIO_FUNC1_MESBUSYCTRL,
 					   CY_435X_F1_MESBUSYCTRL, &err);
+			break;
+		case SDIO_DEVICE_ID_BROADCOM_CYPRESS_89459:
+		case SDIO_DEVICE_ID_CYPRESS_54590:
+		case SDIO_DEVICE_ID_CYPRESS_54591:
+		case SDIO_DEVICE_ID_CYPRESS_54594:
+			brcmf_dbg(INFO, "set F2/MES watermark to 0x%x*4 / 0x%x bytes for 89459\n",
+				  CY_89459_F2_WATERMARK, CY_89459_MESBUSYCTRL);
+			brcmf_sdiod_writeb(sdiod, SBSDIO_WATERMARK,
+					   CY_89459_F2_WATERMARK, &err);
+			devctl = brcmf_sdiod_readb(sdiod, SBSDIO_DEVICE_CTL,
+						   &err);
+			devctl |= SBSDIO_DEVCTL_F2WM_ENAB;
+			brcmf_sdiod_writeb(sdiod, SBSDIO_DEVICE_CTL, devctl,
+					   &err);
+			brcmf_sdiod_writeb(sdiod, SBSDIO_FUNC1_MESBUSYCTRL,
+					   CY_89459_MESBUSYCTRL, &err);
 			break;
 		default:
 			brcmf_sdiod_writeb(sdiod, SBSDIO_WATERMARK,
