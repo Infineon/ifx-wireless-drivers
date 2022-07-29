@@ -66,6 +66,7 @@
 #define	BRCMF_WSEC_PASSPHRASE		BIT(0)
 
 #define BRCMF_WSEC_MAX_SAE_PASSWORD_LEN 128
+#define BRCMF_WSEC_PMK_LEN_SUITEB_192   48
 
 /* primary (ie tx) key */
 #define BRCMF_PRIMARY_KEY		(1 << 1)
