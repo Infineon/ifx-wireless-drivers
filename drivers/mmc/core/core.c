@@ -61,6 +61,17 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
 bool use_spi_crc = 1;
 module_param(use_spi_crc, bool, 0);
 
+/* Set ultra high speed data mode
+ * Data mode value refers from include/linux/mmc/card.h
+ * SD_MODE_UHS_SDR12	1
+ * SD_MODE_UHS_SDR25	2
+ * SD_MODE_UHS_SDR50	4
+ * SD_MODE_UHS_SDR104	8
+ * SD_MODE_UHS_DDR50	16
+*/
+unsigned int sd_uhsimode = 0;
+module_param(sd_uhsimode, uint, 0);
+
 static int mmc_schedule_delayed_work(struct delayed_work *work,
 				     unsigned long delay)
 {
