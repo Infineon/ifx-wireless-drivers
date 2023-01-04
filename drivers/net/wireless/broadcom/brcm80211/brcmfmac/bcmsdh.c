@@ -1104,6 +1104,11 @@ static int brcmf_ops_sdio_probe(struct sdio_func *func,
 	/* Set MMC_QUIRK_LENIENT_FN0 for this card */
 	func->card->quirks |= MMC_QUIRK_LENIENT_FN0;
 
+	/* Set MMC_QUIRK_BLKSZ_FOR_BYTE_MODE for this card
+	 * Use func->cur_blksize by default
+	 */
+	func->card->quirks |= MMC_QUIRK_BLKSZ_FOR_BYTE_MODE;
+
 	/* prohibit ACPI power management for this device */
 	brcmf_sdiod_acpi_set_power_manageable(dev, 0);
 
