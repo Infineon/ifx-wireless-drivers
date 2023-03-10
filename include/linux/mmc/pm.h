@@ -24,4 +24,10 @@ typedef unsigned int mmc_pm_flag_t;
 #define MMC_PM_KEEP_POWER	(1 << 0)	/* preserve card power during suspend */
 #define MMC_PM_WAKE_SDIO_IRQ	(1 << 1)	/* wake up host system on SDIO IRQ assertion */
 
+/* SDIO IDLECLOCK Support - reusing pm_caps */
+#define SDIO_IDLECLOCK_DIS	(1 << 2)	/* Start SDClock */
+#define SDIO_IDLECLOCK_EN	(1 << 3)	/* Stop SDClock */
+#define SDIO_SDMODE_1BIT	(1 << 4)	/* Set 1-bit Bus mode */
+#define SDIO_SDMODE_4BIT	(1 << 5)	/* Set 4-bit Bus mode */
+
 #endif /* LINUX_MMC_PM_H */
