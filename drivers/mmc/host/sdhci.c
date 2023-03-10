@@ -2323,6 +2323,36 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	u8 ctrl;
 
 	host->reinit_uhs = false;
+	/* 43012 WAR: To Support SD Clock to avoid back powering from
+	 *  HOST Controller
+	 */
+	u16 clk;
+
+	if (mmc->pm_caps & SDIO_IDLECLOCK_EN) {
+		/* Stop SD Clock  */
+		clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
+		clk &= ~SDHCI_CLOCK_CARD_EN;
+		sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
+		mmc->pm_caps &= ~SDIO_IDLECLOCK_EN;
+		return;
+	} else if (mmc->pm_caps & SDIO_IDLECLOCK_DIS) {
+		/* Start SD Clock  */
+		clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
+		clk |= SDHCI_CLOCK_CARD_EN;
+		sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
+		mmc->pm_caps &= ~SDIO_IDLECLOCK_DIS;
+		return;
+	} else if (mmc->pm_caps & SDIO_SDMODE_1BIT) {
+		/* Enable 1 bit bus mode  */
+		sdhci_set_bus_width(host, MMC_BUS_WIDTH_1);
+		mmc->pm_caps &= ~SDIO_SDMODE_1BIT;
+		return;
+	} else if (mmc->pm_caps & SDIO_SDMODE_4BIT) {
+		/* Enable 4 bit bus mode  */
+		sdhci_set_bus_width(host, MMC_BUS_WIDTH_4);
+		mmc->pm_caps &= ~SDIO_SDMODE_4BIT;
+		return;
+	}
 
 	if (ios->power_mode == MMC_POWER_UNDEFINED)
 		return;
