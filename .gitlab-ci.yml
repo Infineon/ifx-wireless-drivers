@@ -1,0 +1,20 @@
+# This .gitlab-ci.yml file will validate MR Title and Description check
+
+stages:
+  - policy
+
+variables:
+  GIT_STRATEGY: none
+
+# Merge Request Description Validation
+git_mr_validation:
+  stage: policy
+  tags:
+    - devops-assets
+  script:
+    - rm -rf devops_scripts
+    - git clone git@gitlab.intra.infineon.com:devops/devops_scripts.git
+    - devops_scripts/job_merge_request_policy.sh --fmac-mr-title-check
+    - devops_scripts/job_merge_request_policy.sh --fmac-mr-description-check
+  only:
+    - merge_requests
