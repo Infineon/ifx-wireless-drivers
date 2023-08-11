@@ -258,6 +258,7 @@ struct brcmf_sdio_dev {
 	struct brcmf_sdiod_freezer *freezer;
 	struct brcmf_ulp fmac_ulp;
 	bool ulp;
+	bool redownload_fw;
 };
 
 /* sdio core registers */
