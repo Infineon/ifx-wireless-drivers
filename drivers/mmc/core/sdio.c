@@ -334,7 +334,6 @@ static int sdio_disable_wide(struct mmc_card *card)
 		return 0;
 
 	ctrl &= ~SDIO_BUS_WIDTH_4BIT;
-	ctrl |= SDIO_BUS_ASYNC_INT;
 
 	ret = mmc_io_rw_direct(card, 1, 0, SDIO_CCCR_IF, ctrl, NULL);
 	if (ret)
