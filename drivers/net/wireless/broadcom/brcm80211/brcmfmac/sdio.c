@@ -1235,6 +1235,11 @@ done:
 
 }
 
+bool brcmf_sdio_bus_sleep_state(struct brcmf_sdio *bus)
+{
+	return bus->sleeping;
+}
+
 #ifdef DEBUG
 static inline bool brcmf_sdio_valid_shared_address(u32 addr)
 {
@@ -4416,6 +4421,11 @@ void brcmf_sdio_isr(struct brcmf_sdio *bus, bool in_isr)
 	if (!bus) {
 		brcmf_err("bus is null pointer, exiting\n");
 		return;
+	}
+
+	/* Wake up the bus if in sleep */
+	if (brcmf_sdio_bus_sleep_state(bus)) {
+		brcmf_sdio_bus_sleep(bus, false, false);
 	}
 
 	/* Count the interrupt call */
