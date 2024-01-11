@@ -2,6 +2,7 @@
 
 stages:
   - policy
+  - build
 
 variables:
   GIT_STRATEGY: none
@@ -16,5 +17,28 @@ git_mr_validation:
     - git clone git@gitlab.intra.infineon.com:devops/devops_scripts.git
     - devops_scripts/job_merge_request_policy.sh --fmac-mr-title-check
     - devops_scripts/job_merge_request_policy.sh --fmac-mr-description-check
+  only:
+    - merge_requests
+
+build:
+  stage: build
+  tags:
+    - linux-fmac-devu03 
+  script:
+    - pwd
+    - ls -altr
+    - rm -rf fmac_build_scripts
+    - git clone git@gitlab.intra.infineon.com:linux/fmac_build_scripts.git
+    - cd fmac_build_scripts
+    - git clone git@gitlab.intra.infineon.com:linux/brcm80211.git
+    - mv brcm80211 brcm80211_private
+    - cd brcm80211_private
+    - echo ${CI_COMMIT_REF_NAME}
+    - git fetch origin ${CI_COMMIT_REF_NAME}
+    - echo ${CI_COMMIT_SHA}
+    - git checkout ${CI_COMMIT_SHA}
+    - git log -1
+    - cd ..
+    - ./build_modules.sh x86_64-5.4.21 private --debug
   only:
     - merge_requests
