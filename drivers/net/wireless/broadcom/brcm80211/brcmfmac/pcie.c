@@ -125,7 +125,8 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 
 #define BRCMF_PCIE_REG_LINK_STATUS_CTRL		0xBC
 
-#define BRCMF_PCIE_PCIE2REG_INTMASK		0x24
+#define BRCMF_PCIE_PCIE2REG_INTMASK(dev)	(BRCMF_PCIE_REV_GE64(dev) ? \
+						 0xC14 : 0x24)
 #define BRCMF_PCIE_PCIE2REG_MAILBOXINT(dev)	(BRCMF_PCIE_REV_GE64(dev) ? \
 						 0xC30 : 0x48)
 #define BRCMF_PCIE_PCIE2REG_MAILBOXMASK(dev)	(BRCMF_PCIE_REV_GE64(dev) ? \
@@ -2897,7 +2898,7 @@ static int brcmf_pcie_pm_leave_D3(struct device *dev)
 	brcmf_dbg(PCIE, "Enter, dev=%p, bus=%p\n", dev, bus);
 
 	/* Check if device is still up and running, if so we are ready */
-	if (brcmf_pcie_read_reg32(devinfo, BRCMF_PCIE_PCIE2REG_INTMASK) != 0) {
+	if (brcmf_pcie_read_reg32(devinfo, BRCMF_PCIE_PCIE2REG_INTMASK(devinfo)) != 0) {
 		brcmf_dbg(PCIE, "Try to wakeup device....\n");
 		if (devinfo->use_d0_inform) {
 			if (brcmf_pcie_send_mb_data(devinfo,
