@@ -72,7 +72,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 	/* Set board-type to the first string of the machine compatible prop */
 	root = of_find_node_by_path("/");
 	if (root) {
-		int i, len;
+		int i, len, str_num;
 		char *board_type;
 		const char *tmp;
 
@@ -81,7 +81,9 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		/* get rid of '/' in the compatible string to be able to find the FW */
 		len = strlen(tmp) + 1;
 		board_type = devm_kzalloc(dev, len, GFP_KERNEL);
-		strscpy(board_type, tmp, len);
+		str_num = strscpy(board_type, tmp, len);
+		if(str_num <= 0)
+			brcmf_err("string length copy error %d\n", str_num);
 		for (i = 0; i < board_type[i]; i++) {
 			if (board_type[i] == '/')
 				board_type[i] = '-';

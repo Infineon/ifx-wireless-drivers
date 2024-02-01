@@ -238,6 +238,7 @@ static void brcmf_fw_strip_multi_v1(struct nvram_parser *nvp, u16 domain_nr,
 	bool found;
 	u8 *nvram;
 	u8 id;
+	int ret = 0;
 
 	nvram = kzalloc(nvp->nvram_len + 1 + 3 + sizeof(u32), GFP_KERNEL);
 	if (!nvram)
@@ -250,11 +251,15 @@ static void brcmf_fw_strip_multi_v1(struct nvram_parser *nvp, u16 domain_nr,
 	/* First search for the devpathX and see if it is the configuration
 	 * for domain_nr/bus_nr. Search complete nvp
 	 */
-	snprintf(pci_path, sizeof(pci_path), "=pci/%d/%d", domain_nr,
+	ret = snprintf(pci_path, sizeof(pci_path), "=pci/%d/%d", domain_nr,
 		 bus_nr);
+	if(ret < 0)
+		brcmf_err("snprintf the wrong size\n");
 	pci_len = strlen(pci_path);
-	snprintf(pcie_path, sizeof(pcie_path), "=pcie/%d/%d", domain_nr,
+	ret = snprintf(pcie_path, sizeof(pcie_path), "=pcie/%d/%d", domain_nr,
 		 bus_nr);
+	if(ret < 0)
+		brcmf_err("snprintf the wrong size\n");
 	pcie_len = strlen(pcie_path);
 	found = false;
 	i = 0;
@@ -319,6 +324,7 @@ static void brcmf_fw_strip_multi_v2(struct nvram_parser *nvp, u16 domain_nr,
 	size_t len;
 	u32 i, j;
 	u8 *nvram;
+	int ret = 0;
 
 	nvram = kzalloc(nvp->nvram_len + 1 + 3 + sizeof(u32), GFP_KERNEL);
 	if (!nvram) {
@@ -330,7 +336,9 @@ static void brcmf_fw_strip_multi_v2(struct nvram_parser *nvp, u16 domain_nr,
 	 * Valid entries are of type pcie/X/Y/ where X = domain_nr and
 	 * Y = bus_nr.
 	 */
-	snprintf(prefix, sizeof(prefix), "pcie/%d/%d/", domain_nr, bus_nr);
+	ret = snprintf(prefix, sizeof(prefix), "pcie/%d/%d/", domain_nr, bus_nr);
+	if(ret < 0)
+		brcmf_err("snprintf the wrong size\n");
 	len = strlen(prefix);
 	i = 0;
 	j = 0;
@@ -602,14 +610,20 @@ static char *brcm_alt_fw_path(const char *path, const char *board_type)
 {
 	char alt_path[BRCMF_FW_NAME_LEN];
 	char suffix[5];
+	int str_num;
 
-	strscpy(alt_path, path, BRCMF_FW_NAME_LEN);
+	str_num = strscpy(alt_path, path, BRCMF_FW_NAME_LEN);
+	if(str_num <= 0)
+		brcmf_err("string length copy error %d\n", str_num);
+
 	/* At least one character + suffix */
 	if (strlen(alt_path) < 5)
 		return NULL;
 
 	/* strip .txt or .bin at the end */
-	strscpy(suffix, alt_path + strlen(alt_path) - 4, 5);
+	str_num = strscpy(suffix, alt_path + strlen(alt_path) - 4, 5);
+	if(str_num <= 0)
+		brcmf_err("string length copy error %d\n", str_num);
 	alt_path[strlen(alt_path) - 4] = 0;
 	strlcat(alt_path, ".", BRCMF_FW_NAME_LEN);
 	strlcat(alt_path, board_type, BRCMF_FW_NAME_LEN);
@@ -650,10 +664,12 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	struct brcmf_fw *fwctx = ctx;
 	struct brcmf_fw_item *cur = &fwctx->req->items[fwctx->curpos];
 	char alt_path[BRCMF_FW_NAME_LEN];
-	int ret;
+	int ret, str_num;;
 
 	if (!fw && cur->type == BRCMF_FW_TYPE_TRXS) {
-		strscpy(alt_path, cur->path, BRCMF_FW_NAME_LEN);
+		str_num = strscpy(alt_path, cur->path, BRCMF_FW_NAME_LEN);
+		if(str_num <= 0)
+			brcmf_err("string length copy error %d\n", str_num);
 		/* strip 'se' from .trxse at the end */
 		//alt_path[strlen(alt_path) - ] = 0;
 		ret = request_firmware(&fw, alt_path, fwctx->dev);
@@ -661,7 +677,9 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 			cur->path = alt_path;
 	}
 	if (!fw && cur->type == BRCMF_FW_TYPE_TRXSE) {
-		strscpy(alt_path, cur->path, BRCMF_FW_NAME_LEN);
+		str_num = strscpy(alt_path, cur->path, BRCMF_FW_NAME_LEN);
+		if(str_num <= 0)
+			brcmf_err("string length copy error %d\n", str_num);
 		/* strip 'se' from .trxse at the end */
 		alt_path[strlen(alt_path) - 2] = 0;
 		ret = request_firmware(&fw, alt_path, fwctx->dev);
