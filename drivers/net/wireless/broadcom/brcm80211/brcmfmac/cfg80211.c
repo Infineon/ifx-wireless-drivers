@@ -6682,6 +6682,11 @@ brcmf_notify_csa_completion_ind(struct brcmf_if *ifp,
 	if (!wdev)
 		return -EINVAL;
 
+	if (!wdev->current_bss) {
+		brcmf_err("Got csa_completion event while no connection\n");
+		return -EINVAL;
+	}
+
 	memset(&chandef, 0, sizeof(chandef));
 	/* Reuse cfg80211 call to get chandef */
 	error = brcmf_cfg80211_get_channel(wiphy, wdev, &chandef);
