@@ -3,6 +3,7 @@
 stages:
   - policy
   - build
+  - check
 
 variables:
   GIT_STRATEGY: none
@@ -42,3 +43,19 @@ build:
     - ./build_modules.sh x86_64-5.4.21 private --debug
   only:
     - merge_requests
+
+patch_check:
+  stage: check
+  tags:
+    - devops-assets
+  script:
+    - git clone git@gitlab.intra.infineon.com:linux/brcm80211.git
+    - cd brcm80211
+    - git diff remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME remotes/origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME > ${CI_MERGE_REQUEST_IID}.diff
+    - ./scripts/checkpatch.pl ${CI_MERGE_REQUEST_IID}.diff
+  allow_failure: true
+  only:
+    - merge_requests
+  after_script:
+    - 'rm -rf brcm80211'
+
