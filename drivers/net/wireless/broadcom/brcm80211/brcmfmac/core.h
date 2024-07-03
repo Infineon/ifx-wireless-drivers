@@ -92,6 +92,13 @@ struct brcmf_rev_info {
 	u32 nvramrev;
 };
 
+/** wlc interface version */
+struct brcmf_wlc_version {
+	/* wlc interface version numbers */
+	u16	wlc_ver_major;		/**< wlc interface major version number */
+	u16	wlc_ver_minor;		/**< wlc interface minor version number */
+};
+
 /* Common structure for module and instance linkage */
 struct brcmf_pub {
 	/* Linkage ponters */
@@ -127,6 +134,7 @@ struct brcmf_pub {
 	int req_mpc;
 
 	struct brcmf_rev_info revinfo;
+	struct brcmf_wlc_version wlc_ver;
 #ifdef DEBUG
 	struct dentry *dbgfs_dir;
 #endif
