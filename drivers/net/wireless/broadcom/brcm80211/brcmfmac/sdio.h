@@ -12,8 +12,8 @@
 #include "firmware.h"
 
 
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 1, 97))
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+#if (KERNEL_VERSION(6, 1, 97) >= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE)
 #include <uapi/linux/sched/types.h>
 #endif /* kernel 4.11.0 */
 #endif /* kernel 6.1.97 */
