@@ -868,18 +868,29 @@ struct brcmf_rev_info_le {
 	__le32 nvramrev;
 };
 
-/** wlc interface version */
+/**
+ * struct brcmf_wlc_version_le - firmware revision info.
+ *
+ * @version: structure version.
+ * @length: structure length.
+ * @epi_ver_major: EPI major version
+ * @epi_ver_minor: EPI minor version
+ * @epi_ver_rc: EPI rc version
+ * @epi_ver_incr: EPI increment version
+ * @wlc_ver_major: WLC major version
+ * @wlc_ver_minor: WLC minor version
+ */
 struct brcmf_wlc_version_le {
-	__le16	version;		/**< version of the structure */
-	__le16	length;			/**< length of the entire structure */
-	/* epi version numbers */
-	__le16	epi_ver_major;		/**< epi major version number */
-	__le16	epi_ver_minor;		/**< epi minor version number */
-	__le16	epi_rc_num;		/**< epi RC number */
-	__le16	epi_incr_num;		/**< epi increment number */
-	/* wlc interface version numbers */
-	__le16	wlc_ver_major;		/**< wlc interface major version number */
-	__le16	wlc_ver_minor;		/**< wlc interface minor version number */
+	__le16 version;
+	__le16 length;
+
+	__le16 epi_ver_major;
+	__le16 epi_ver_minor;
+	__le16 epi_ver_rc;
+	__le16 epi_ver_incr;
+
+	__le16 wlc_ver_major;
+	__le16 wlc_ver_minor;
 };
 
 /**
