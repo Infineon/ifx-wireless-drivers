@@ -632,7 +632,7 @@ static int brcmf_usb_tx(struct device *dev, struct sk_buff *skb)
 		goto fail;
 	}
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0))
+#if (KERNEL_VERSION(4, 16, 0) > LINUX_VERSION_CODE)
 	if (devinfo->bus_pub.bus->allow_skborphan)
 		skb_orphan(skb);
 #endif
@@ -1272,7 +1272,7 @@ static int brcmf_usb_probe_cb(struct brcmf_usbdev_info *devinfo,
 	bus->proto_type = BRCMF_PROTO_BCDC;
 	bus->fwvid = fwvid;
 	bus->always_use_fws_queue = true;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0))
+#if (KERNEL_VERSION(4, 16, 0) > LINUX_VERSION_CODE)
 	bus->allow_skborphan = true;
 #endif
 #ifdef CONFIG_PM
