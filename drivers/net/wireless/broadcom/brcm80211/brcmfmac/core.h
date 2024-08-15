@@ -13,6 +13,7 @@
 #include <net/cfg80211.h>
 #include "fweh.h"
 #include "fwil_types.h"
+#include "feature.h"
 
 #define TOE_TX_CSUM_OL		0x00000001
 #define TOE_RX_CSUM_OL		0x00000002
@@ -129,7 +130,7 @@ struct brcmf_pub {
 	struct brcmf_ampdu_rx_reorder
 		*reorder_flows[BRCMF_AMPDU_RX_REORDER_MAXFLOWS];
 
-	u32 feat_flags;
+	u8 feat_flags[DIV_ROUND_UP(BRCMF_FEAT_LAST, 8)];
 	u32 chip_quirks;
 	int req_mpc;
 
