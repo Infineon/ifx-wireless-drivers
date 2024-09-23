@@ -324,6 +324,7 @@
 	non-removable;
 	pm-ignore-notify;
 	cap-power-off;
+	wakeup-source;
 	mmc-pwrseq = <&usdhc1_pwrseq>;
 	status = "okay";
 	brcmf: bcrmf@1 {
