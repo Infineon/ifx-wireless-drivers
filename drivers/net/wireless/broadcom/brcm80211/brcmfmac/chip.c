@@ -1128,7 +1128,7 @@ static int brcmf_blhs_ack_wait_dongle_access(struct brcmf_chip *pub)
 {
 	struct brcmf_chip_priv *chip;
 	u32 addr;
-	int err;
+	int err = 0;
 
 	chip = container_of(pub, struct brcmf_chip_priv, pub);
 
@@ -1141,7 +1141,8 @@ static int brcmf_blhs_ack_wait_dongle_access(struct brcmf_chip *pub)
 	addr = pub->blhs->h2d;
 	pub->blhs->write(chip->ctx, addr, BRCMF_BLHS_H2D_BP_CLK_DISABLE_ACK);
 
-	err = brcmf_get_intr_pending_data(chip->ctx);
+	if (chip->ops->get_intr_pend)
+		err = chip->ops->get_intr_pend(chip->ctx);
 
 	return err;
 }
