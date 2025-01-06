@@ -10038,21 +10038,6 @@ int brcmf_cfg80211_wait_vif_event(struct brcmf_cfg80211_info *cfg,
 				  vif_event_equals(event, action), timeout);
 }
 
-static bool brmcf_use_iso3166_ccode_fallback(struct brcmf_pub *drvr)
-{
-	if (drvr->settings->trivial_ccode_map)
-		return true;
-
-	switch (drvr->bus_if->chip) {
-	case BRCM_CC_43430_CHIP_ID:
-	case BRCM_CC_4345_CHIP_ID:
-	case BRCM_CC_43602_CHIP_ID:
-		return true;
-	default:
-		return false;
-	}
-}
-
 static s32 brcmf_translate_country_code(struct brcmf_pub *drvr, char alpha2[2],
 					struct brcmf_fil_country_le *ccreq)
 {
@@ -10063,24 +10048,19 @@ static s32 brcmf_translate_country_code(struct brcmf_pub *drvr, char alpha2[2],
 
 	if ((alpha2[0] == ccreq->country_abbrev[0]) &&
 	    (alpha2[1] == ccreq->country_abbrev[1])) {
-		brcmf_dbg(TRACE, "Country code already set\n");
+		brcmf_dbg(INFO, "Country code already set\n");
 		return -EAGAIN;
 	}
 
 	country_codes = drvr->settings->country_codes;
 	if (!country_codes) {
-		if (brmcf_use_iso3166_ccode_fallback(drvr)) {
-			brcmf_dbg(TRACE, "No country codes configured for device, using ISO3166 code and 0 rev\n");
-			memset(ccreq, 0, sizeof(*ccreq));
-			ccreq->country_abbrev[0] = alpha2[0];
-			ccreq->country_abbrev[1] = alpha2[1];
-			ccreq->ccode[0] = alpha2[0];
-			ccreq->ccode[1] = alpha2[1];
-			return 0;
-		}
-
-		brcmf_dbg(TRACE, "No country codes configured for device\n");
-		return -EINVAL;
+		brcmf_dbg(INFO, "No country codes configured for device, using ISO3166 code and 0 rev\n");
+		memset(ccreq, 0, sizeof(*ccreq));
+		ccreq->country_abbrev[0] = alpha2[0];
+		ccreq->country_abbrev[1] = alpha2[1];
+		ccreq->ccode[0] = alpha2[0];
+		ccreq->ccode[1] = alpha2[1];
+		return 0;
 	}
 
 	found_index = -1;
@@ -10095,7 +10075,7 @@ static s32 brcmf_translate_country_code(struct brcmf_pub *drvr, char alpha2[2],
 		}
 	}
 	if (found_index == -1) {
-		brcmf_dbg(TRACE, "No country code match found\n");
+		brcmf_dbg(INFO, "No country code match found\n");
 		return -EINVAL;
 	}
 	memset(ccreq, 0, sizeof(*ccreq));
@@ -10459,7 +10439,7 @@ static void brcmf_cfg80211_reg_notifier(struct wiphy *wiphy,
 			return;
 		}
 
-	brcmf_dbg(TRACE, "Enter: initiator=%d, alpha=%c%c\n", req->initiator,
+	brcmf_dbg(INFO, "Enter: initiator=%d, alpha=%c%c\n", req->initiator,
 		  req->alpha2[0], req->alpha2[1]);
 
 	err = brcmf_fil_iovar_data_get(ifp, "country", &ccreq, sizeof(ccreq));
@@ -10471,6 +10451,9 @@ static void brcmf_cfg80211_reg_notifier(struct wiphy *wiphy,
 	err = brcmf_translate_country_code(ifp->drvr, req->alpha2, &ccreq);
 	if (err)
 		return;
+
+	/* Abort on-going scan before changing ccode */
+	brcmf_abort_scanning(cfg);
 
 	err = brcmf_fil_iovar_data_set(ifp, "country", &ccreq, sizeof(ccreq));
 	if (err) {
