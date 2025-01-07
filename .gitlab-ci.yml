@@ -7,15 +7,17 @@ stages:
 
 variables:
   GIT_STRATEGY: none
+  CI_SERVER_URL: "https://gitlab.intra.infineon.com"
 
 # Merge Request Description Validation
 git_mr_validation:
   stage: policy
   tags:
-    - devops-assets
+    - ifx-linux-container
+  image: docker-ifxsource-registry.vih.infineon.com/linux/ubuntu-20.04/mtb-assets:latest
   script:
     - rm -rf devops_scripts
-    - git clone git@gitlab.intra.infineon.com:devops/devops_scripts.git
+    - git clone --depth=1 --no-progress ${CI_SERVER_URL}/devops/devops_scripts.git
     - devops_scripts/job_merge_request_policy.sh --fmac-mr-title-check
     - devops_scripts/job_merge_request_policy.sh --fmac-mr-description-check
   only:
