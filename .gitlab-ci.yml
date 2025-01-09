@@ -33,7 +33,7 @@ build:
     - rm -rf fmac_build_scripts
     - git clone git@gitlab.intra.infineon.com:linux/fmac_build_scripts.git
     - cd fmac_build_scripts
-    - git clone git@gitlab.intra.infineon.com:linux/brcm80211.git
+    - git clone --reference /proj_netapp/iot_ws/wlan/gitlab-runner/ref_mirror_fmac/brcm80211.git git@gitlab.intra.infineon.com:linux/brcm80211.git
     - mv brcm80211 brcm80211_private
     - cd brcm80211_private
     - echo ${CI_COMMIT_REF_NAME}
