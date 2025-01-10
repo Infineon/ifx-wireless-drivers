@@ -49,9 +49,9 @@ build:
 patch_check:
   stage: check
   tags:
-    - devops-assets
+    - linux-fmac-devu03
   script:
-    - git clone git@gitlab.intra.infineon.com:linux/brcm80211.git
+    - git clone --reference /proj_netapp/iot_ws/wlan/gitlab-runner/ref_mirror_fmac/brcm80211.git git@gitlab.intra.infineon.com:linux/brcm80211.git
     - cd brcm80211
     - git diff remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME remotes/origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME > ${CI_MERGE_REQUEST_IID}.diff
     - ./scripts/checkpatch.pl ${CI_MERGE_REQUEST_IID}.diff
@@ -60,4 +60,3 @@ patch_check:
     - merge_requests
   after_script:
     - 'rm -rf brcm80211'
-
