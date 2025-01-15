@@ -10205,6 +10205,33 @@ cfg80211_set_channel(struct wiphy *wiphy, struct net_device *dev,
 	return err;
 }
 
+static struct ieee80211_channel *
+brcmf_cfg80211_get_chan_by_idx(struct wiphy *wiphy, int idx)
+{
+	enum nl80211_band band;
+	struct ieee80211_supported_band *wiphy_band = NULL;
+
+	for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		/* FIXME SWLINUX-4979, the firmware cannot report the survey info of 6GHz,
+		 * once the firmware can report it in someday.
+		 * This condition can be removed.
+		 */
+		if (band == NL80211_BAND_6GHZ)
+			continue;
+
+		wiphy_band = wiphy->bands[band];
+		if (!wiphy_band)
+			continue;
+
+		if (idx < wiphy_band->n_channels)
+			return &wiphy_band->channels[idx];
+
+		idx -= wiphy_band->n_channels;
+	}
+
+	return NULL;
+}
+
 static int
 brcmf_cfg80211_dump_survey(struct wiphy *wiphy, struct net_device *ndev,
 			   int idx, struct survey_info *info)
@@ -10212,7 +10239,6 @@ brcmf_cfg80211_dump_survey(struct wiphy *wiphy, struct net_device *ndev,
 	struct brcmf_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct brcmf_if *ifp = netdev_priv(cfg_to_ndev(cfg));
 	struct brcmf_dump_survey *survey;
-	struct ieee80211_supported_band *band;
 	struct ieee80211_channel *chan;
 	struct cca_msrmnt_query req;
 	u32 noise;
@@ -10229,20 +10255,14 @@ brcmf_cfg80211_dump_survey(struct wiphy *wiphy, struct net_device *ndev,
 		return -EBUSY;
 	}
 
-	band = wiphy->bands[NL80211_BAND_2GHZ];
-	if (band && idx >= band->n_channels) {
-		idx -= band->n_channels;
-		band = NULL;
-	}
-
-	if (!band || idx >= band->n_channels) {
-		band = wiphy->bands[NL80211_BAND_5GHZ];
-		if (idx >= band->n_channels)
-			return -ENOENT;
+	/* Getting target channel */
+	chan = brcmf_cfg80211_get_chan_by_idx(wiphy, idx);
+	if (!chan) {
+		brcmf_dbg(TRACE, "no more channel\n");
+		return -ENOENT;
 	}
 
 	/* Setting current channel to the requested channel */
-	chan = &band->channels[idx];
 	err = cfg80211_set_channel(wiphy, ndev, chan, NL80211_CHAN_HT20);
 	if (err) {
 		info->channel = chan;
@@ -10318,7 +10338,6 @@ brcmf_cfg80211_dump_survey_2(struct wiphy *wiphy, struct net_device *ndev,
 {
 	struct brcmf_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct brcmf_if *ifp = netdev_priv(cfg_to_ndev(cfg));
-	struct ieee80211_supported_band *band;
 	struct ieee80211_channel *chan;
 	struct cca_survey_req *survey = NULL;
 	struct cca_survey  *secs;
@@ -10334,22 +10353,12 @@ brcmf_cfg80211_dump_survey_2(struct wiphy *wiphy, struct net_device *ndev,
 		return -EBUSY;
 	}
 
-	band = wiphy->bands[NL80211_BAND_2GHZ];
-	if (band && idx >= band->n_channels) {
-		idx -= band->n_channels;
-		band = NULL;
-	}
-
-	if (!band || idx >= band->n_channels) {
-		band = wiphy->bands[NL80211_BAND_5GHZ];
-		if (idx >= band->n_channels) {
-			brcmf_dbg(TRACE, "not support channel idx=%d\n", idx);
-			return -ENOENT;
-		}
-	}
-
 	/* Getting target channel */
-	chan = &band->channels[idx];
+	chan = brcmf_cfg80211_get_chan_by_idx(wiphy, idx);
+	if (!chan) {
+		brcmf_dbg(TRACE, "no more channel\n");
+		return -ENOENT;
+	}
 
 	/* Set interface up, explicitly. */
 	err = brcmf_fil_cmd_int_set(ifp, BRCMF_C_UP, 1);
