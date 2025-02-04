@@ -12,11 +12,11 @@
 #include "firmware.h"
 
 
-#if (KERNEL_VERSION(6, 1, 97) >= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(6, 1, 110) >= LINUX_VERSION_CODE)
 #if (KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE)
 #include <uapi/linux/sched/types.h>
 #endif /* kernel 4.11.0 */
-#endif /* kernel 6.1.97 */
+#endif /* kernel 6.1.110 */
 
 #define SDIOD_FBR_SIZE		0x100
 
