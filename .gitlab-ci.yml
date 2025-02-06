@@ -23,7 +23,7 @@ git_mr_validation:
   only:
     - merge_requests
 
-build:
+build-u03:
   stage: build
   tags:
     - linux-fmac-devu03 
@@ -43,6 +43,29 @@ build:
     - git log -1
     - cd ..
     - ./build_modules.sh x86_64-5.4.21 private --debug
+  only:
+    - merge_requests
+
+build-2020uv:
+  stage: build
+  tags:
+    - alc-2020uv-itool 
+  script:
+    - pwd
+    - ls -altr
+    - rm -rf fmac_build_scripts
+    - git clone git@gitlab.intra.infineon.com:linux/fmac_build_scripts.git
+    - cd fmac_build_scripts
+    - git clone --reference /proj_netapp/iot_ws/wlan/gitlab-runner/ref_mirror_fmac/brcm80211.git git@gitlab.intra.infineon.com:linux/brcm80211.git
+    - mv brcm80211 brcm80211_private
+    - cd brcm80211_private
+    - echo ${CI_COMMIT_REF_NAME}
+    - git fetch origin ${CI_COMMIT_REF_NAME}
+    - echo ${CI_COMMIT_SHA}
+    - git checkout ${CI_COMMIT_SHA}
+    - git log -1
+    - cd ..
+    - ./build_modules.sh x86_64-6.1.19 private --debug
   only:
     - merge_requests
 
