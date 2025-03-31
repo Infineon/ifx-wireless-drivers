@@ -10878,11 +10878,15 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 		*cap |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 	}
 #ifdef CONFIG_PM
-	/* for backward compatibility, retain BRCMF_FEAT_WOWL_GTK */
-	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_WOWL_GTK) ||
-	    brcmf_feat_is_enabled(ifp, BRCMF_FEAT_GTKO))
+	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_WOWL_GTK))
 		ops->set_rekey_data = brcmf_cfg80211_set_rekey_data;
 #endif
+	/* if the firmware has GTKO cap,
+	 * user space can use NL80211_CMD_SET_REKEY_OFFLOAD command to pass gtk data.
+	 */
+	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_GTKO))
+		ops->set_rekey_data = brcmf_cfg80211_set_rekey_data;
+
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_DUMP_OBSS))
 		ops->dump_survey = brcmf_cfg80211_dump_survey;
 	else if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_SURVEY_DUMP))
