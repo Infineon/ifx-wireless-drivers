@@ -8425,8 +8425,9 @@ brcmf_notify_auth_frame_rx(struct brcmf_if *ifp,
 	brcmf_fil_cmd_data_get(ifp, BRCMF_C_GET_BSSID, mgmt_frame->bssid,
 			       ETH_ALEN);
 	frame += offsetof(struct ieee80211_mgmt, u);
-	memcpy(&mgmt_frame->u, frame,
-	       mgmt_frame_len - offsetof(struct ieee80211_mgmt, u));
+	unsafe_memcpy(&mgmt_frame->u, frame,
+		      mgmt_frame_len - offsetof(struct ieee80211_mgmt, u),
+		      /* alloc enough buf*/);
 
 	freq = ieee80211_channel_to_frequency(ch.control_ch_num,
 			BRCMU_CHAN_BAND_TO_NL80211(ch.band));
