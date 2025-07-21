@@ -43,6 +43,7 @@
 #include "soc.h"
 #include "fwil.h"
 #include "common.h"
+#include "bt_shared_sdio_ifx.h"
 
 /* make sure BTS version is the same as bt drier */
 #define BTS_VER_MAJOR 2

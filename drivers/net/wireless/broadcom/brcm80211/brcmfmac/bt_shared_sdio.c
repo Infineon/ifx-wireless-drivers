@@ -39,24 +39,12 @@
 #include "sdio.h"
 #include "soc.h"
 #include "fwil.h"
+#include "bt_shared_sdio.h"
 
 #define SDIOD_ADDR_BOUND		0x1000
 #define SDIOD_ADDR_BOUND_MASK		0xfff
 
 struct brcmf_bus *g_bus_if;
-
-enum bus_owner {
-	WLAN_MODULE = 0,
-	BT_MODULE
-};
-
-struct btsdio_info {
-	u32 bt_buf_reg_addr;
-	u32 host_ctrl_reg_addr;
-	u32 bt_ctrl_reg_addr;
-	u32 bt_buf_addr;
-	u32 wlan_buf_addr;
-};
 
 void brcmf_btsdio_int_handler(struct brcmf_bus *bus_if)
 {
