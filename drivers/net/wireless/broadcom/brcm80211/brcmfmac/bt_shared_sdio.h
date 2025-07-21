@@ -29,10 +29,34 @@
  */
 
 #ifdef CONFIG_BRCMFMAC_BT_SHARED_SDIO
+enum bus_owner {
+	WLAN_MODULE = 0,
+	BT_MODULE
+};
+
+struct btsdio_info {
+	u32 bt_buf_reg_addr;
+	u32 host_ctrl_reg_addr;
+	u32 bt_ctrl_reg_addr;
+	u32 bt_buf_addr;
+	u32 wlan_buf_addr;
+};
+
 int brcmf_btsdio_init(struct brcmf_bus *bus_if);
 void brcmf_btsdio_detach(struct brcmf_bus *bus_if);
 void brcmf_btsdio_int_handler(struct brcmf_bus *bus_if);
 u8 brcmf_btsdio_bus_count(struct brcmf_bus *bus_if);
+int brcmf_btsdio_attach(struct brcmf_bus *bus_if, void *btdata,
+			void (*bt_int_fun)(void *data));
+void *brcmf_bt_sdio_attach(void *btdata, void (*bt_int_fun)(void *data));
+int brcmf_get_wlan_info(struct brcmf_bus *bus_if, struct btsdio_info *bs_info);
+u32 brcmf_bus_reg_read(struct brcmf_bus *bus_if, u32 addr);
+void brcmf_bus_reg_write(struct brcmf_bus *bus_if, u32 addr, u32 val);
+int brcmf_membytes(struct brcmf_bus *bus_if, bool set, u32 address, u8 *data,
+		   unsigned int size);
+int brcmf_bus_clk_enable(struct brcmf_bus *bus_if, enum bus_owner owner);
+int brcmf_bus_clk_disable(struct brcmf_bus *bus_if, enum bus_owner owner);
+void brcmf_bus_reset_bt_use_count(struct brcmf_bus *bus_if);
 #else
 static inline
 u8 brcmf_btsdio_bus_count(struct brcmf_bus *bus_if)
