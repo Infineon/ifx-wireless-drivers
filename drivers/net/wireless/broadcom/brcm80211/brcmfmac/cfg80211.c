@@ -8714,6 +8714,7 @@ brcmf_notify_ext_assoc_frame_rx(struct brcmf_if *ifp,
 	owe_info.ie_len = mgmt_frame_len - offsetof(struct ieee80211_mgmt, u);
 	memcpy(owe_info.peer, e->addr, ETH_ALEN);
 	owe_info.ie = kzalloc(owe_info.ie_len, GFP_KERNEL);
+	owe_info.assoc_link_id = -1;
 
 	if (!owe_info.ie)
 		return -ENOMEM;
