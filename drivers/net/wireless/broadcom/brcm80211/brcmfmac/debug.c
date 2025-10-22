@@ -90,6 +90,7 @@ brcmf_debug_trace_parser(struct brcmf_if *ifp,
 	return err;
 }
 
+#ifdef DEBUG
 int brcmf_debug_create_memdump(struct brcmf_bus *bus, const void *data,
 			       size_t len)
 {
@@ -137,3 +138,4 @@ void brcmf_debugfs_add_entry(struct brcmf_pub *drvr, const char *fn,
 	debugfs_create_devm_seqfile(drvr->bus_if->dev, fn,
 				    drvr->wiphy->debugfsdir, read_fn);
 }
+#endif
