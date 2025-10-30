@@ -84,6 +84,7 @@ int mmc_attach_sdio(struct mmc_host *host);
 
 /* Module parameters */
 extern bool use_spi_crc;
+extern unsigned int sd_uhsimode;
 
 /* Debugfs information for hosts and cards */
 #ifdef CONFIG_DEBUG_FS
