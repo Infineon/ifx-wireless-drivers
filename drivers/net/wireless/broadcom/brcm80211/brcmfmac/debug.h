@@ -33,6 +33,22 @@
 #define BRCMF_TWT_VAL		0x00400000
 #define BRCMF_SDIOEXT_VAL	0x00800000
 
+/* bus_tuning level bits for MMC CRC error / -110 error recovery
+ * Level 1: Resend cmd to firmware
+ * Level 2: dummy read before r/w on errors
+ * Level 3: byte access for intstatus
+ * Level 4: Temp monitoring for bus reset
+ * Level 5: drive strength A
+ * Level 6: allow SDIO auto-retuning
+ */
+#define BRCMF_BUS_TUNING_L1_VAL	0x00000001
+#define BRCMF_BUS_TUNING_L2_VAL	0x00000002
+#define BRCMF_BUS_TUNING_L3_VAL	0x00000004
+#define BRCMF_BUS_TUNING_L4_VAL	0x00000008
+#define BRCMF_BUS_TUNING_L5_VAL	0x00000010
+#define BRCMF_BUS_TUNING_L6_VAL	0x00000020
+#define BRCMF_BUS_TUNING_ERR_CNT_THR	1
+
 #define BRCMF_DEBUG_DUMP_TIME_BUF_LEN (17 + 1)
 #define BRCMF_LOG_DUMP_TS_MULTIPLIER_VALUE    60
 #define BRCMF_LOG_DUMP_BOOTTIME    "%5lld.%06ld"
@@ -129,6 +145,15 @@ do {									\
 } while (0)
 
 extern int brcmf_msg_level;
+extern int brcmf_bus_tuning;
+
+/* Bus tuning level check macros */
+#define BRCMF_BUS_TUNING_L1_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L1_VAL)
+#define BRCMF_BUS_TUNING_L2_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L2_VAL)
+#define BRCMF_BUS_TUNING_L3_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L3_VAL)
+#define BRCMF_BUS_TUNING_L4_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L4_VAL)
+#define BRCMF_BUS_TUNING_L5_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L5_VAL)
+#define BRCMF_BUS_TUNING_L6_ON()	(brcmf_bus_tuning & BRCMF_BUS_TUNING_L6_VAL)
 
 struct brcmf_pub;
 #ifdef DEBUG

@@ -116,10 +116,17 @@ brcmf_fil_cmd_data(struct brcmf_if *ifp, u32 cmd, void *data, u32 len, bool set)
 		else
 			err = brcmf_proto_query_dcmd(drvr, ifp->ifidx, cmd,
 						     data, len, &fwerr);
-		if (!err || resend_cnt > MAX_CMD_RESEND)
-			break;
+		if (err)
+			brcmf_err("cmd error %d\n", err);
 
-		brcmf_err("cmd error %d, resend cmd count %d\n", err, resend_cnt++);
+		if (BRCMF_BUS_TUNING_L1_ON()) {
+			if (!err || resend_cnt > MAX_CMD_RESEND)
+				break;
+
+			brcmf_dbg(FIL, "resend cmd count %d\n", resend_cnt++);
+		} else {
+			break;
+		}
 	} while (true);
 
 	if (err) {
@@ -132,11 +139,7 @@ brcmf_fil_cmd_data(struct brcmf_if *ifp, u32 cmd, void *data, u32 len, bool set)
 	if (ifp->fwil_fwerr)
 		return fwerr;
 
-	if (err && resend_cnt == MAX_CMD_RESEND) {
-		if (drvr->bus_reset.func)
-			schedule_work(&drvr->bus_reset);
-	}
-
+	/* Don't do bus_reset scheduling, it will abort DVT test */
 	return err;
 }
 

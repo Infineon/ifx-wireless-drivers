@@ -48,6 +48,12 @@ MODULE_PARM_DESC(txglomsz, "Maximum tx packet chain size [SDIO]");
 int brcmf_msg_level;
 module_param_named(debug, brcmf_msg_level, int, 0600);
 MODULE_PARM_DESC(debug, "Level of debug output");
+/* Bus tuning level configuration for MMC CRC error / -110 error recovery.
+ * See debug.h for bits, sysfs modifiable.
+ */
+int brcmf_bus_tuning = 0x23;
+module_param_named(bus_tuning, brcmf_bus_tuning, int, 0644);
+MODULE_PARM_DESC(bus_tuning, "Level of SDIO bus tuning");
 
 static int brcmf_p2p_enable;
 module_param_named(p2pon, brcmf_p2p_enable, int, 0);
@@ -710,6 +716,7 @@ int brcmf_debugfs_param_read(struct seq_file *s, void *data)
 
 	seq_printf(s, "%-20s: %s\n", "Name", "Value");
 	seq_printf(s, "%-20s: 0x%x\n", "debug", brcmf_msg_level);
+	seq_printf(s, "%-20s: 0x%x\n", "bus_tuning", brcmf_bus_tuning);
 	seq_printf(s, "%-20s: %s\n", "alternative_fw_path", brcmf_firmware_path);
 	seq_printf(s, "%-20s: %d\n", "p2pon", !!brcmf_p2p_enable);
 	seq_printf(s, "%-20s: %d\n", "fcmode", bus_if->drvr->settings->fcmode);

@@ -73,6 +73,7 @@
 #define SDIO_CCCR_BRCM_SEPINT_MASK		BIT(0)
 #define SDIO_CCCR_BRCM_SEPINT_OE		BIT(1)
 #define SDIO_CCCR_BRCM_SEPINT_ACT_HI		BIT(2)
+#define SDIO_CCCR_DRV_STR			0x15
 
 /* function 1 miscellaneous registers */
 
@@ -141,6 +142,8 @@
 
 #define SBSDIO_FUNC1_MISC_REG_START	0x10000	/* f1 misc register start */
 #define SBSDIO_FUNC1_MISC_REG_LIMIT	0x1001F	/* f1 misc register end */
+/* SD_REG(intstatus) offset for Level 3 tuning byte access check */
+#define SBSDIO_INTSTATUS_OFFSET	0x4020
 
 /* Sdio Core Rev 31 */
 /* Hard Reset SDIO core, output soft reset signal which should cause backplane reset */
@@ -467,6 +470,8 @@ int brcmf_sdio_clkctl(struct brcmf_sdio *bus, uint target, bool pendok);
 bool brcmf_sdio_bus_sleep_state(struct brcmf_sdio *bus);
 void brcmf_sdio_trigger_dpc(struct brcmf_sdio *bus);
 u32 brcmf_sdio_get_enum_addr(struct brcmf_sdio *bus);
+bool brcmf_sdio_get_err_cnt_status(struct brcmf_sdio *bus,
+				   const char *str, int err, bool clear);
 
 /* SHM offsets */
 #define M_DS1_CTRL_SDIO(ptr)	((ptr).ulp_shm_offset.m_ulp_ctrl_sdio)

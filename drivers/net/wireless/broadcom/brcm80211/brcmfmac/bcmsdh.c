@@ -228,6 +228,15 @@ void brcmf_sdiod_change_state(struct brcmf_sdio_dev *sdiodev,
 	sdiodev->state = state;
 }
 
+static void brcmf_sdiod_bus_dummy_read(struct sdio_func *func, u32 addr, const char *str)
+{
+	int err;
+
+	brcmf_dbg(SDIOEXT, "caller %s: read 0x%x\n", str, addr);
+	sdio_readb(func, addr, &err);
+	usleep_range(50, 100);
+}
+
 static int brcmf_sdiod_set_backplane_window(struct brcmf_sdio_dev *sdiodev,
 					    u32 addr)
 {
@@ -260,7 +269,11 @@ static int brcmf_sdiod_set_backplane_window(struct brcmf_sdio_dev *sdiodev,
 u32 brcmf_sdiod_readl(struct brcmf_sdio_dev *sdiodev, u32 addr, int *ret)
 {
 	u32 data = 0;
-	int retval;
+	int retval = 0;
+	u32 offset;
+	bool err_gt_thr = false;
+	int retval0 = 0, retval1 = 0, retval2 = 0, retval3 = 0;
+	bool byte_access = false;
 
 	brcmf_dbg(SDIOEXT, "addr 0x%x\n", addr);
 
@@ -279,12 +292,49 @@ u32 brcmf_sdiod_readl(struct brcmf_sdio_dev *sdiodev, u32 addr, int *ret)
 	brcmf_dbg(SDIO, "reading from addr 0x%x bar0 0x%08x ", addr, sdiodev->sbwad);
 
 	addr &= SBSDIO_SB_OFT_ADDR_MASK;
+	offset = addr;
 	addr |= SBSDIO_SB_ACCESS_2_4B_FLAG;
 
-	data = sdio_readl(sdiodev->func1, addr, &retval);
+	err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, false);
+	if (BRCMF_BUS_TUNING_L2_ON() && err_gt_thr)
+		brcmf_sdiod_bus_dummy_read(sdiodev->func1, addr, __func__);
 
-	if (retval)
+	/* Level 3 tuning: use byte access for SD_REG(intstatus) */
+	if ((BRCMF_BUS_TUNING_L3_ON() && offset == SBSDIO_INTSTATUS_OFFSET) && err_gt_thr) {
+		u8 b0, b1, b2, b3;
+
+		byte_access = true;
+
+		b0 = sdio_readb(sdiodev->func1, addr, &retval0);
+		if (retval0)
+			b0 = 0;
+
+		b1 = sdio_readb(sdiodev->func1, addr + 1, &retval1);
+		if (retval1)
+			b1 = 0;
+
+		b2 = sdio_readb(sdiodev->func1, addr + 2, &retval2);
+		if (retval2)
+			b2 = 0;
+
+		b3 = sdio_readb(sdiodev->func1, addr + 3, &retval3);
+		if (retval3)
+			b3 = 0;
+
+		retval = retval0 ? retval0 : retval1 ? retval1 : retval2 ? retval2 : retval3;
+		data = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+	} else {
+		data = sdio_readl(sdiodev->func1, addr, &retval);
+		err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, retval, false);
+	}
+
+	if (retval) {
+		if (byte_access)
+			brcmf_err("offset 0x%x, err %d,%d,%d,%d, L3 byte-access\n", offset,
+				  retval0, retval1, retval2, retval3);
+
 		data = 0;
+	}
 
 	brcmf_dbg(SDIO, "data 0x%08x\n", data);
 out:
@@ -297,7 +347,11 @@ out:
 void brcmf_sdiod_writel(struct brcmf_sdio_dev *sdiodev, u32 addr,
 			u32 data, int *ret)
 {
-	int retval;
+	int retval = 0;
+	u32 offset;
+	bool err_gt_thr = false;
+	int retval1 = 0, retval2 = 0, retval3 = 0, retval4 = 0;
+	bool byte_access = false;
 
 	brcmf_dbg(SDIOEXT, "addr 0x%x val 0x%x\n", addr, data);
 	if (brcmf_sdio_bus_sleep_state(sdiodev->bus)) {
@@ -315,9 +369,31 @@ void brcmf_sdiod_writel(struct brcmf_sdio_dev *sdiodev, u32 addr,
 	brcmf_dbg(SDIO, "writing 0x%08x to addr 0x%x bar0 0x%08x\n", data, addr, sdiodev->sbwad);
 
 	addr &= SBSDIO_SB_OFT_ADDR_MASK;
+	offset = addr;
 	addr |= SBSDIO_SB_ACCESS_2_4B_FLAG;
 
-	sdio_writel(sdiodev->func1, data, addr, &retval);
+	err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, false);
+	if (BRCMF_BUS_TUNING_L2_ON() && err_gt_thr)
+		brcmf_sdiod_bus_dummy_read(sdiodev->func1, addr, __func__);
+
+	/* Level 3 tuning: use byte access for SD_REG(intstatus) */
+	if ((BRCMF_BUS_TUNING_L3_ON() && offset == SBSDIO_INTSTATUS_OFFSET) && err_gt_thr) {
+		byte_access = true;
+
+		sdio_writeb(sdiodev->func1, data & 0xff, addr, &retval1);
+		sdio_writeb(sdiodev->func1, (data >> 8) & 0xff, addr + 1, &retval2);
+		sdio_writeb(sdiodev->func1, (data >> 16) & 0xff, addr + 2, &retval3);
+		sdio_writeb(sdiodev->func1, (data >> 24) & 0xff, addr + 3, &retval4);
+		retval = retval1 ? retval1 : retval2 ? retval2 : retval3 ? retval3 : retval4;
+	} else {
+		sdio_writel(sdiodev->func1, data, addr, &retval);
+		err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, retval, false);
+	}
+
+	if (retval && byte_access) {
+		brcmf_err("offset = 0x%x, err %d,%d,%d,%d, L3 byte-access\n", offset,
+			  retval1, retval2, retval3, retval4);
+	}
 
 out:
 	if (ret)
@@ -330,6 +406,7 @@ static int brcmf_sdiod_skbuff_read(struct brcmf_sdio_dev *sdiodev,
 {
 	unsigned int req_sz;
 	int err;
+	bool err_gt_thr = false;
 
 	if (brcmf_sdio_bus_sleep_state(sdiodev->bus)) {
 		if (!sdiodev->ignore_bus_error)
@@ -340,6 +417,9 @@ static int brcmf_sdiod_skbuff_read(struct brcmf_sdio_dev *sdiodev,
 	/* Single skb use the standard mmc interface */
 	req_sz = skb->len + 3;
 	req_sz &= (uint)~3;
+	err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, false);
+	if (BRCMF_BUS_TUNING_L2_ON() && err_gt_thr)
+		brcmf_sdiod_bus_dummy_read(sdiodev->func1, SBSDIO_FUNC1_SBADDRLOW, __func__);
 
 	switch (func->num) {
 	case SDIO_FUNC_1:
@@ -355,6 +435,8 @@ static int brcmf_sdiod_skbuff_read(struct brcmf_sdio_dev *sdiodev,
 		WARN(1, "invalid sdio function number: %d\n", func->num);
 		err = -ENOMEDIUM;
 	}
+	if (err && err != -ENOMEDIUM)
+		brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, err, false);
 
 	if (err == -ENOMEDIUM)
 		brcmf_sdiod_change_state(sdiodev, BRCMF_SDIOD_NOMEDIUM);
@@ -371,6 +453,7 @@ static int brcmf_sdiod_skbuff_write(struct brcmf_sdio_dev *sdiodev,
 {
 	unsigned int req_sz;
 	int err;
+	bool err_gt_thr = false;
 
 	if (brcmf_sdio_bus_sleep_state(sdiodev->bus)) {
 		if (!sdiodev->ignore_bus_error)
@@ -381,6 +464,9 @@ static int brcmf_sdiod_skbuff_write(struct brcmf_sdio_dev *sdiodev,
 	/* Single skb use the standard mmc interface */
 	req_sz = skb->len + 3;
 	req_sz &= (uint)~3;
+	err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, false);
+	if (BRCMF_BUS_TUNING_L2_ON() && err_gt_thr)
+		brcmf_sdiod_bus_dummy_read(sdiodev->func1, SBSDIO_FUNC1_SBADDRLOW, __func__);
 
 	if (func->num == SDIO_FUNC_1 || func->num == SDIO_FUNC_2)
 		err = sdio_memcpy_toio(func, addr, ((u8 *)(skb->data)), req_sz);
@@ -388,6 +474,8 @@ static int brcmf_sdiod_skbuff_write(struct brcmf_sdio_dev *sdiodev,
 		err = sdio_writesb(func, addr, ((u8 *)(skb->data)), req_sz);
 	else
 		return -EINVAL;
+	if (err)
+		brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, err, false);
 
 	if (err == -ENOMEDIUM)
 		brcmf_sdiod_change_state(sdiodev, BRCMF_SDIOD_NOMEDIUM);
@@ -788,6 +876,7 @@ brcmf_sdiod_ramrw(struct brcmf_sdio_dev *sdiodev, bool write, u32 address,
 	struct sk_buff *pkt;
 	u32 sdaddr;
 	uint dsize;
+	bool err_gt_thr = false;
 
 	dsize = min_t(uint, SBSDIO_SB_OFT_ADDR_LIMIT, size);
 	pkt = __dev_alloc_skb(dsize, GFP_KERNEL);
@@ -819,6 +908,10 @@ brcmf_sdiod_ramrw(struct brcmf_sdio_dev *sdiodev, bool write, u32 address,
 
 		sdaddr &= SBSDIO_SB_OFT_ADDR_MASK;
 		sdaddr |= SBSDIO_SB_ACCESS_2_4B_FLAG;
+		err_gt_thr = brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, false);
+		if (BRCMF_BUS_TUNING_L2_ON() && err_gt_thr)
+			brcmf_sdiod_bus_dummy_read(sdiodev->func1,
+						   SBSDIO_FUNC1_SBADDRLOW, __func__);
 
 		skb_put(pkt, dsize);
 
@@ -832,7 +925,9 @@ brcmf_sdiod_ramrw(struct brcmf_sdio_dev *sdiodev, bool write, u32 address,
 		}
 
 		if (err) {
-			brcmf_err("membytes transfer failed write=%d err=%d\n", write, err);
+			brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, err, false);
+			brcmf_err("membytes transfer failed write=%d err=%d, err threshold %s\n",
+				  write, err, err_gt_thr ? "reached" : "not reached");
 			break;
 		}
 		if (!write)

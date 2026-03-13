@@ -43,6 +43,7 @@
 #include "bt_shared_sdio_ifx.h"
 #include "trxhdr.h"
 #include "feature.h"
+#include "cfg80211.h"
 
 #define DCMD_RESP_TIMEOUT	msecs_to_jiffies(2500)
 #define CTL_DONE_TIMEOUT	msecs_to_jiffies(2500)
@@ -351,6 +352,13 @@ static unsigned char global_init_retry = 0;
 #define KSO_MAX_SEQ_TIME_NS (1000000 * 10) /* Ideal time for kso sequence 10ms in ns*/
 #define MAX_KSO_ATTEMPTS (PMU_MAX_TRANSITION_DLY/KSO_WAIT_US)
 
+/* Level 4 bus tuning: temperature monitoring interval (30 minutes) */
+#define BRCMF_TEMP_MONITOR_INTERVAL_MS	(30 * 60 * 1000)
+/* Temperature change threshold to trigger bus reset */
+#define BRCMF_TEMP_CHANGE_THRESHOLD	10
+#define BRCMF_SDIO_ERR_CNT_FUNC_MAX	32
+#define BRCMF_SDIO_ERR_CNT_CLEAR_TIMEOUT_MS	10000
+
 static void brcmf_sdio_firmware_callback(struct device *dev, int err,
 					 struct brcmf_fw_request *fwreq);
 static struct brcmf_fw_request *
@@ -565,6 +573,7 @@ struct brcmf_sdio {
 	u16 head_align;		/* buffer pointer alignment */
 	u16 sgentry_align;	/* scatter-gather buffer alignment */
 	struct mutex sdsem;
+	struct mutex err_cnt_lock; /* protect err_cnt state */
 	bool chipid_preset;
 	#define MAXSKBPEND 1024
 	struct sk_buff *skbbuf[MAXSKBPEND];
@@ -573,6 +582,13 @@ struct brcmf_sdio {
 	struct task_ctl	thr_rxf_ctl;
 	spinlock_t rxf_lock;	/* lock for rxf idx protection */
 	bool h1_ddr50_mode;	/* H1 DDR50 Mode enabled*/
+	int err_cnt[BRCMF_SDIO_ERR_CNT_FUNC_MAX];
+	char *err_cnt_funcs[BRCMF_SDIO_ERR_CNT_FUNC_MAX];
+	unsigned long err_cnt_last_err_jiffies;
+	/* Level 4 bus tuning: temperature monitoring for bus reset */
+	struct delayed_work temp_monitor_work;
+	s32 temp_baseline;
+	unsigned long temp_baseline_time;
 };
 
 /* clkstate */
@@ -839,19 +855,22 @@ static int
 brcmf_sdio_kso_control(struct brcmf_sdio *bus, bool on)
 {
 	u8 wr_val = 0, rd_val, cmp_val, bmask;
-	int err = 0;
+	int err = 0, ret;
 	int err_cnt = 0;
 	int try_cnt = 0;
 	unsigned long kso_loop_time = 0;
 	struct timespec64 ts_start, ts_end, ts_delta;
 	struct brcmf_sdio_dev *sdiod = bus->sdiodev;
+	bool l6_err_active = BRCMF_BUS_TUNING_L6_ON() &&
+				     brcmf_sdio_get_err_cnt_status(bus, NULL, 0, false);
 
 	brcmf_dbg(TRACE, "Enter: on=%d\n", on);
 
-	sdio_retune_crc_disable(bus->sdiodev->func1);
+	if (!l6_err_active)
+		sdio_retune_crc_disable(bus->sdiodev->func1);
 
 	/* Cannot re-tune if device is asleep; defer till we're awake */
-	if (on)
+	if (on && !l6_err_active)
 		sdio_retune_hold_now(bus->sdiodev->func1);
 
 	wr_val = (on << SBSDIO_FUNC1_SLEEPCSR_KSO_SHIFT);
@@ -957,7 +976,8 @@ brcmf_sdio_kso_control(struct brcmf_sdio *bus, bool on)
 		brcmf_dbg(SDIO, "chipid: 0x%x ret = 0x%x\n", chipid, ret);
 	}
 
-	sdio_retune_release(bus->sdiodev->func1);
+	if (!l6_err_active)
+		sdio_retune_release(bus->sdiodev->func1);
 
 	if (kso_loop_time > KSO_MAX_SEQ_TIME_NS)
 		brcmf_dbg(SDIO, "KSO=%d sequence took %luns > expected %uns try_cnt=%d\n"
@@ -967,7 +987,14 @@ brcmf_sdio_kso_control(struct brcmf_sdio *bus, bool on)
 	brcmf_dbg(SDIO, "INFO: KSO=%d try_cnt=%d err_cnt=%d kso_seq_time=%luns\n"
 			"rd_val=0x%x err=%d\n", on, try_cnt, err_cnt, kso_loop_time, rd_val, err);
 
-	sdio_retune_crc_enable(bus->sdiodev->func1);
+	if (!l6_err_active)
+		sdio_retune_crc_enable(bus->sdiodev->func1);
+
+	if (BRCMF_BUS_TUNING_L2_ON() && brcmf_sdio_get_err_cnt_status(bus, NULL, 0, false)) {
+		sdiod->ignore_bus_error = true;
+		brcmf_sdiod_readl(sdiod, bus->sdio_core->base + SD_REG(intstatus), &ret);
+		sdiod->ignore_bus_error = false;
+	}
 
 	return err;
 }
@@ -3054,6 +3081,7 @@ static inline void brcmf_sdio_clrintr(struct brcmf_sdio *bus)
 
 static int brcmf_sdio_intr_rstatus(struct brcmf_sdio *bus)
 {
+	struct brcmf_sdio_dev *sdiodev = bus->sdiodev;
 	struct brcmf_core *core = bus->sdio_core;
 	u32 addr;
 	unsigned long val;
@@ -3063,8 +3091,11 @@ static int brcmf_sdio_intr_rstatus(struct brcmf_sdio *bus)
 
 	val = brcmf_sdiod_readl(bus->sdiodev, addr, &ret);
 	bus->sdcnt.f1regdata++;
-	if (ret != 0)
+	if (ret != 0) {
+		brcmf_err("brcmf_sdiod_readl: err %d\n", ret);
+		mmc_retune_needed(sdiodev->func1->card->host);
 		return ret;
+	}
 
 	val &= bus->hostintmask;
 	atomic_set(&bus->fcstate, !!(val & I_HMB_FC_STATE));
@@ -3073,7 +3104,13 @@ static int brcmf_sdio_intr_rstatus(struct brcmf_sdio *bus)
 	if (val) {
 		brcmf_sdiod_writel(bus->sdiodev, addr, val, &ret);
 		bus->sdcnt.f1regdata++;
-		atomic_or(val, &bus->intstatus);
+		if (ret == 0)
+			atomic_or(val, &bus->intstatus);
+	}
+
+	if (ret) {
+		brcmf_err("brcmf_sdiod_writel: err %d\n", ret);
+		mmc_retune_needed(sdiodev->func1->card->host);
 	}
 
 	return ret;
@@ -4546,6 +4583,7 @@ void brcmf_sdio_isr(struct brcmf_sdio *bus, bool in_isr)
 
 		if (brcmf_sdio_intr_rstatus(bus)) {
 			brcmf_err("failed backplane access\n");
+			atomic_set(&bus->ipend, 1);
 		}
 	}
 
@@ -4721,9 +4759,39 @@ brcmf_sdio_drivestrengthinit(struct brcmf_sdio_dev *sdiodev,
 	u32 drivestrength_sel = 0;
 	u32 cc_data_temp;
 	u32 addr;
+	int err = 0;
 
 	if (!(ci->cc_caps & CC_CAP_PMU))
 		return;
+
+	if (BRCMF_BUS_TUNING_L5_ON()) {
+		struct mmc_host *host = sdiodev->func1->card->host;
+
+		drivestrength_sel = brcmf_sdiod_func0_rb(sdiodev, SDIO_CCCR_DRV_STR, &err);
+		if (err) {
+			brcmf_err("drive strength read err %d\n", err);
+
+			return;
+		}
+		/* Check if card supports Type A */
+		if (!(drivestrength_sel & SDIO_DRIVE_SDTA)) {
+			brcmf_info("Card does not support Drive Type A\n");
+		} else {
+			brcmf_info("drive strength read 0x%x\n", drivestrength_sel);
+			/* Clear DTSx bits [5:4], then set Type A (0x10) */
+			drivestrength_sel &= ~(SDIO_DRIVE_DTSx_MASK << SDIO_DRIVE_DTSx_SHIFT);
+			drivestrength_sel |= SDIO_DTSx_SET_TYPE_A;
+			brcmf_sdiod_func0_wb(sdiodev, SDIO_CCCR_DRV_STR, drivestrength_sel, &err);
+			brcmf_info("drive strength write 0x%x err %d\n", drivestrength_sel, err);
+			if (!err && host) {
+				host->ios.drv_type = MMC_SET_DRIVER_TYPE_A;
+				host->ops->set_ios(host, &host->ios);
+				brcmf_info("Host driver type synced to Type A\n");
+			}
+
+			return;
+		}
+	}
 
 	switch (SDIOD_DRVSTR_KEY(ci->chip, ci->pmurev)) {
 	case SDIOD_DRVSTR_KEY(BRCM_CC_4330_CHIP_ID, 12):
@@ -5350,8 +5418,10 @@ static int brcmf_sdio_bus_reset(struct device *dev)
 	struct brcmf_bus *bus_if = dev_get_drvdata(dev);
 	struct brcmf_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
 
-	brcmf_dbg(SDIO, "Enter\n");
+	brcmf_info("Enter\n");
 
+	if (BRCMF_BUS_TUNING_L2_ON() || BRCMF_BUS_TUNING_L3_ON())
+		brcmf_sdio_get_err_cnt_status(sdiodev->bus, __func__, 0, true);
 	/* start by unregistering irqs */
 	brcmf_sdiod_intr_unregister(sdiodev);
 
@@ -5749,6 +5819,98 @@ brcmf_sdio_prepare_fw_request(struct brcmf_sdio *bus)
 	return fwreq;
 }
 
+static void brcmf_sdio_temp_monitor_work_handler(struct work_struct *work)
+{
+	struct brcmf_sdio *bus = container_of(work, struct brcmf_sdio,
+					      temp_monitor_work.work);
+	struct brcmf_pub *drvr;
+	struct brcmf_if *ifp;
+	struct brcmf_join_params ssid;
+	s32 current_temp = 0, temp_diff = 0, isup = 0;
+	int err = 0;
+
+	if (!BRCMF_BUS_TUNING_L4_ON())
+		return;
+
+	if (!bus->sdiodev || !bus->sdiodev->bus_if)
+		return;
+
+	drvr = bus->sdiodev->bus_if->drvr;
+	if (!drvr)
+		return;
+	if (bus->sdiodev->bus_if->state != BRCMF_BUS_UP)
+		goto reschedule;
+
+	ifp = drvr->iflist[0];
+	if (!ifp || !ifp->vif || !ifp->ndev)
+		goto reschedule;
+
+	/* Connected then return */
+	err = brcmf_fil_cmd_data_get(ifp, BRCMF_C_GET_SSID, &ssid, sizeof(ssid.ssid_le));
+	if (err || ssid.ssid_le.SSID_len)
+		goto reschedule;
+	/* Get current temperature via phy_tempsense iovar */
+	brcmf_fil_cmd_int_get(ifp, BRCMF_C_GET_UP, &isup);
+	if (!isup) {
+		if (!test_bit(BRCMF_VIF_STATUS_READY, &ifp->vif->sme_state))
+			err = brcmf_cfg80211_up(ifp->ndev);
+
+		if (err) {
+			brcmf_dbg(INFO, "L4 tuning: failed to bring VIF up, err=%d\n", err);
+			goto reschedule;
+		}
+
+		brcmf_set_mpc(ifp, 0);
+		brcmf_fil_cmd_int_set(ifp, BRCMF_C_UP, 1);
+	}
+
+	err = brcmf_fil_iovar_int_get(ifp, "phy_tempsense", &current_temp);
+	if (err) {
+		brcmf_dbg(INFO, "L4 tuning: failed to get phy_tempsense, err=%d\n", err);
+		goto reschedule;
+	}
+
+	brcmf_dbg(INFO, "L4 tuning: current_temp=%d, baseline=%d\n",
+		  current_temp, bus->temp_baseline);
+
+	/* Check if baseline is set (first run) */
+	if (bus->temp_baseline_time == 0) {
+		bus->temp_baseline = current_temp;
+		bus->temp_baseline_time = jiffies;
+		brcmf_dbg(INFO, "L4 tuning: baseline temperature set to %d\n",
+			  current_temp);
+		goto reschedule;
+	}
+	/* Check if temperature changed by +/-10 in 30 min */
+	if (time_before(jiffies, bus->temp_baseline_time +
+		       msecs_to_jiffies(BRCMF_TEMP_MONITOR_INTERVAL_MS))) {
+		/* Check if temperature changed by +/-10 in 30 min */
+		temp_diff = bus->temp_baseline - current_temp;
+		if (temp_diff >= BRCMF_TEMP_CHANGE_THRESHOLD ||
+		    temp_diff <= -BRCMF_TEMP_CHANGE_THRESHOLD) {
+			brcmf_info("L4 tuning: temp change %d->%d (diff=%d), triggering bus reset\n",
+				   bus->temp_baseline, current_temp, temp_diff);
+			schedule_work(&drvr->bus_reset);
+			/* Reset baseline after triggering reset */
+			bus->temp_baseline = current_temp;
+			bus->temp_baseline_time = jiffies;
+			return;
+		}
+	}
+	/* Check if 30 minutes have passed since baseline was set */
+	if (time_after(jiffies, bus->temp_baseline_time +
+		       msecs_to_jiffies(BRCMF_TEMP_MONITOR_INTERVAL_MS))) {
+		bus->temp_baseline = current_temp;
+		bus->temp_baseline_time = jiffies;
+	}
+
+reschedule:
+	/* Reschedule the work to run every minute for monitoring */
+	if (BRCMF_BUS_TUNING_L4_ON())
+		schedule_delayed_work(&bus->temp_monitor_work,
+				      msecs_to_jiffies(60 * 1000));
+}
+
 struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 {
 	int ret;
@@ -5794,6 +5956,7 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 	init_waitqueue_head(&bus->dcmd_resp_wait);
 	/* Initialize thread based operation and lock */
 	mutex_init(&bus->sdsem);
+	mutex_init(&bus->err_cnt_lock);
 
 	/* too early to have drvr */
 	if (sdiodev->settings->sdio_rxf_in_kthread_enabled) {
@@ -5819,6 +5982,21 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 	if (IS_ERR(bus->watchdog_tsk)) {
 		pr_warn("brcmf_watchdog thread failed to start\n");
 		bus->watchdog_tsk = NULL;
+	}
+
+	if (BRCMF_BUS_TUNING_L4_ON()) {
+		/* Level 4 bus tuning: initialize temperature monitoring */
+		INIT_DELAYED_WORK(&bus->temp_monitor_work,
+				  brcmf_sdio_temp_monitor_work_handler);
+		bus->temp_baseline = 0;
+		bus->temp_baseline_time = 0;
+		brcmf_info("L4 tuning: starting SDIO temperature monitoring\n");
+		schedule_delayed_work(&bus->temp_monitor_work,
+				      msecs_to_jiffies(60 * 1000));
+	}
+	if (BRCMF_BUS_TUNING_L2_ON() || BRCMF_BUS_TUNING_L3_ON()) {
+		brcmf_info("L2/L3 tuning: clear error counter.\n");
+		brcmf_sdio_get_err_cnt_status(bus, __func__, 0, true);
 	}
 	/* Initialize DPC thread */
 	bus->dpc_triggered = false;
@@ -5899,6 +6077,10 @@ void brcmf_sdio_remove(struct brcmf_sdio *bus)
 
 	brcmf_dbg(TRACE, "Enter\n");
 	if (bus) {
+		if (BRCMF_BUS_TUNING_L2_ON() || BRCMF_BUS_TUNING_L3_ON())
+			brcmf_sdio_get_err_cnt_status(bus, __func__, 0, true);
+		if (BRCMF_BUS_TUNING_L4_ON())
+			cancel_delayed_work_sync(&bus->temp_monitor_work);
 		/* Stop watchdog task */
 		if (bus->watchdog_tsk) {
 			send_sig(SIGTERM, bus->watchdog_tsk, 1);
@@ -6141,4 +6323,109 @@ static int brcmf_ulp_event_notify(struct brcmf_if *ifp,
 u32 brcmf_sdio_get_enum_addr(struct brcmf_sdio *bus)
 {
 	return bus->sdio_core->base;
+}
+
+/* brcmf_sdio_get_err_cnt_status() - Track per-caller SDIO error status.
+ * @bus: SDIO bus instance that owns the counter table.
+ * @str: Caller name key. Pass NULL to query aggregate threshold status.
+ * @err: Last operation error. Non-zero updates timestamp and caller counter.
+ * @clear: Clear all tracked counters and caller keys when true.
+ *
+ * This helper is active when Level 2 or Level 3 bus tuning is enabled and the
+ * device is SDIO_DEVICE_ID_CYPRESS_55572. It keeps per-caller counters in
+ * @bus and returns whether any tracked caller has reached
+ * BRCMF_BUS_TUNING_ERR_CNT_THR.
+ *
+ * When @str is NULL, it does not update a specific caller entry and instead
+ * performs an aggregate query across all tracked callers.
+ *
+ * To avoid stale sticky state, when @err stays zero for longer than
+ * BRCMF_SDIO_ERR_CNT_CLEAR_TIMEOUT_MS, all counters are cleared automatically.
+ */
+
+bool brcmf_sdio_get_err_cnt_status(struct brcmf_sdio *bus,
+				   const char *str, int err, bool clear)
+{
+	int *cnt;
+	char **funcs;
+	int empty_slot = -1;
+	bool ret = false;
+
+	if (!bus)
+		return false;
+
+	cnt = bus->err_cnt;
+	funcs = bus->err_cnt_funcs;
+	mutex_lock(&bus->err_cnt_lock);
+
+	if (clear) {
+		for (int i = 0; i < BRCMF_SDIO_ERR_CNT_FUNC_MAX; i++) {
+			kfree(funcs[i]);
+			funcs[i] = NULL;
+			cnt[i] = 0;
+		}
+		bus->err_cnt_last_err_jiffies = 0;
+		goto out;
+	}
+
+	if (bus->sdiodev->func2->device != SDIO_DEVICE_ID_CYPRESS_55572)
+		goto out;
+
+	if (!BRCMF_BUS_TUNING_L2_ON() && !BRCMF_BUS_TUNING_L3_ON())
+		goto out;
+
+	if (err) {
+		bus->err_cnt_last_err_jiffies = jiffies;
+	} else if (bus->err_cnt_last_err_jiffies &&
+		   time_after(jiffies, bus->err_cnt_last_err_jiffies +
+			      msecs_to_jiffies(BRCMF_SDIO_ERR_CNT_CLEAR_TIMEOUT_MS))) {
+		for (int i = 0; i < BRCMF_SDIO_ERR_CNT_FUNC_MAX; i++) {
+			if (!funcs[i])
+				continue;
+			cnt[i] = 0;
+		}
+		bus->err_cnt_last_err_jiffies = 0;
+		goto out;
+	}
+
+	if (!str) {
+		int total = 0;
+
+		for (int i = 0; i < BRCMF_SDIO_ERR_CNT_FUNC_MAX; i++) {
+			if (!funcs[i])
+				continue;
+			brcmf_dbg(SDIO, "err_cnt_status: func=%s cnt=%d\n",
+				  funcs[i], cnt[i]);
+			if (cnt[i] >= BRCMF_BUS_TUNING_ERR_CNT_THR)
+				total++;
+		}
+		brcmf_dbg(SDIO, "total funcs exceeding threshold: %d\n",
+			  total);
+		ret = total > 0;
+		goto out;
+	}
+
+	for (int i = 0; i < BRCMF_SDIO_ERR_CNT_FUNC_MAX; i++) {
+		if (funcs[i] && !strcmp(funcs[i], str)) {
+			if (err && cnt[i] < BRCMF_BUS_TUNING_ERR_CNT_THR)
+				cnt[i]++;
+			ret = (cnt[i] >= BRCMF_BUS_TUNING_ERR_CNT_THR);
+			goto out;
+		}
+
+		if (!funcs[i] && empty_slot == -1)
+			empty_slot = i;
+	}
+
+	if (empty_slot != -1) {
+		funcs[empty_slot] = kstrdup(str, GFP_KERNEL);
+		if (funcs[empty_slot]) {
+			if (err)
+				cnt[empty_slot]++;
+		}
+	}
+
+out:
+	mutex_unlock(&bus->err_cnt_lock);
+	return ret;
 }
